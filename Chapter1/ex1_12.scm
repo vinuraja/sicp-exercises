@@ -1,0 +1,6 @@
+(define (pascal-elem i j)
+  (cond ((or (> j i) (< i 0) (< j 0)) 0)
+        ((= j 0) 1)
+        (else (+ (pascal-elem (- i 1) j) (pascal-elem (- i 1) (- j 1))))
+  )
+)
