@@ -36,6 +36,8 @@
      (let ((next (improve guess)))
        (if (close-enough? guess next)
            next
+           ; Can be done as (iterative-improve close-enough? improve) next)
+           ; without this fancy recursion too.
            ((try-gen try-gen) next)))))))
 
 (define (nth-root n x)
