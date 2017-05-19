@@ -27,7 +27,7 @@
   ((iterative-improve close-enough? f) first-guess))
 
 (define (iterative-improve close-enough? improve)
-  ; <mindblow> This shows recursion with lambdas! :) </mindblown>
+  ; <mindblown> This shows recursion with lambdas! :) </mindblown>
   ((lambda (f) (f f))
    (lambda (try-gen)       
      (lambda (guess)
