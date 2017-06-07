@@ -1,0 +1,68 @@
+; Make a logic table out of all the 16 possibilities
+; of signs and eliminate the cases where the upper bound
+; is negative and the lower bound is positive, and group
+; together the others if the multiplication result is the
+; same.
+
+(define (make-interval a b) (cons a b))
+
+(define (upper-bound int)
+  (if (> (car int) (cdr int))
+      (car int)
+      (cdr int)))
+
+(define (lower-bound int)
+  (if (<= (car int) (cdr int))
+      (car int)
+      (cdr int)))
+
+(define (non-negative? n)
+  (not (negative? n)))
+
+(define (mul-interval x y)
+  (let ((x-low (lower-bound x))
+        (x-up (upper-bound x))
+        (y-low (lower-bound y))
+        (y-up (upper-bound y)))
+        (cond ((or (and (non-negative? x-low)
+                        (non-negative? x-up)
+                        (non-negative? y-low)
+                        (non-negative? y-up))
+                   (and (negative? x-low)
+                        (negative? x-up)
+                        (negative? y-low)
+                        (negative? y-up)))
+                      (make-interval (* x-up y-up) (* x-low y-low)))
+              ((or (and (non-negative? x-low)
+                        (non-negative? x-up)
+                        (negative? y-low)
+                        (negative? y-up))
+                   (and (negative? x-low)
+                        (negative? x-up)
+                        (non-negative? y-low)
+                        (non-negative? y-up)))
+                      (make-interval (* x-up y-low) (* x-low y-up)))
+              ((and (non-negative? x-low)
+                    (non-negative? x-up)
+                    (non-negative? y-up)
+                    (negative? y-low))
+                  (make-interval (* x-up y-up) (* y-low x-up)))
+              ((and (non-negative? x-up)
+                    (negative? x-low)
+                    (non-negative? y-up)
+                    (non-negative? y-low))
+                  (make-interval (* x-up y-up) (* x-low y-up)))
+              ((and (non-negative? x-up)
+                    (negative? x-low)
+                    (negative? y-up)
+                    (negative? y-low))
+                  (make-interval (* x-low y-low) (* x-up y-low)))
+              ((and (non-negative? y-up)
+                    (negative? y-low)
+                    (negative? x-up)
+                    (negative? x-low))
+                  (make-interval (* x-low y-low) (* y-up x-low)))
+              (else (make-interval (max (* x-up y-up) (* x-low y-low))
+                                   (min (* x-up y-low) (* y-up x-low)))))))
+
+
