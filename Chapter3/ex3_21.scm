@@ -36,3 +36,9 @@
                queue 
                (cdr (front-ptr queue)))
               queue)))
+
+; The queue is empty if the front-ptr points to an empty list.
+; The rear-ptr doesn't factor into this.
+
+(define (print-queue queue)
+  (display (front-ptr queue)))

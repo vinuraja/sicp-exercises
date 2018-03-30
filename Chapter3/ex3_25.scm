@@ -1,0 +1,27 @@
+#lang sicp
+(define (assoc key records)
+  (cond ((or (not (pair? records)) (null? records)) #f)
+        ((equal? key (caar records)) 
+         (car records))
+        (else (assoc key (cdr records)))))
+
+(define (lookup keys table)
+  (let ((subtable (assoc (car keys) (cdr table))))
+    (cond ((not subtable) #f)
+          ((null? (cdr keys)) (cdr subtable))
+          (else (lookup (cdr keys) subtable)))))
+
+(define (insert! keys value table)
+  (define (create-table keys value)
+    (if (null? (cdr keys))
+        (cons (car keys) value)
+        (list (car keys) (create-table (cdr keys) value))))
+  (let ((subtable (assoc (car keys) (cdr table))))
+    (cond  ((not subtable)
+            (set-cdr! table (cons (create-table keys value) (cdr table))))
+           ((null? (cdr keys)) (set-cdr! subtable value))
+           (else (insert! (cdr keys) value subtable)))
+    'ok))
+
+(define (make-table)
+  (list '*table*))
