@@ -6,5 +6,14 @@
   (let ((sum (make-connector))
         (mul (make-connector)))
     (adder a b sum)
-    (constant mul 0.5)
-    (multiplier mul c)))
+    (constant 0.5 mul)
+    (multiplier sum mul c)))
+
+(define a (make-connector))
+(probe "A" a)
+(define b (make-connector))
+(probe "B" b)
+(define c (make-connector))
+(probe "C" c)
+
+(averager a b c)
