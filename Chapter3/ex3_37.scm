@@ -51,9 +51,11 @@
     z))
 
 (define (celsius-fahrenheit-converter x)
-  (c+ (c* (c/ (cv 9) (cv 5))
+  (c+ (c* (c/ (cv 9.0) (cv 5))
           x)
       (cv 32)))
 
 (define C (make-connector))
 (define F (celsius-fahrenheit-converter C))
+(probe "C" C)
+(probe "F" F)
