@@ -3,7 +3,7 @@
 (include "streams.scm")
 
 (define (square-numbers-method)
-  (define (square x) (* x x x))
+  (define (square x) (* x x))
   (define (square-sum p)
     (+ (square (car p)) (square (cadr p))))
   (define (square-ordered)
