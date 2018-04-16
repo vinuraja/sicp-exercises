@@ -1,0 +1,38 @@
+#lang sicp
+(#%require racket/include)
+(include "streams.scm")
+
+(define (square-numbers-method)
+  (define (square x) (* x x x))
+  (define (square-sum p)
+    (+ (square (car p)) (square (cadr p))))
+  (define (square-ordered)
+    (weighted-pairs integers integers square-sum))
+  (define (impl)
+    (define squares-impl (stream-map (lambda (a b c d) (list a b c d))
+                                     (square-ordered)
+                                     (stream-cdr (square-ordered))
+                                     (stream-cdr (stream-cdr (square-ordered)))
+                                     (stream-cdr (stream-cdr (stream-cdr (square-ordered))))))
+    (stream-map (lambda (l) (list (square-sum (car l)) (car l) (cadr l) (caddr l)))
+                (stream-filter
+                 (lambda (l)
+                   (and (= (square-sum (car l)) (square-sum (cadr l)))
+                        (= (square-sum (cadr l)) (square-sum (caddr l)))
+                        (not (= (square-sum (caddr l)) (square-sum (cadddr l))))))
+                squares-impl)))
+(impl))
+    
+
+(define square-numbers (square-numbers-method))
+
+(define (iter n)
+  (if (not (= n -1))
+      (begin (iter (- n 1)) (display (stream-ref square-numbers n)) (newline))))
+(iter 5)
+;(87539319 (255 414) (228 423) (167 436))
+;(119824488 (346 428) (90 492) (11 493))
+;(143604279 (408 423) (359 460) (111 522))
+;(175959000 (315 525) (198 552) (70 560))
+;(327763000 (510 580) (339 661) (300 670))
+;(700314552 (510 828) (456 846) (334 872))
