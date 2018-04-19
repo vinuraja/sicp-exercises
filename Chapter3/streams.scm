@@ -163,3 +163,11 @@
                 (stream-cdr t))
     (weighted-pairs (stream-cdr s) (stream-cdr t) weight)
     weight)))
+
+(define (integral integrand init-value dt)
+  (define int
+    (cons-stream
+     init-value
+     (add-streams (scale-stream integrand dt)
+                  int)))
+  int)
