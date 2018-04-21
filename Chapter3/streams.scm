@@ -7,7 +7,11 @@
   (force (cdr stream)))
 
 (define (stream-map proc . argstreams)
-  (if (stream-null? (car argstreams))
+  (define (any-stream-null? argstreams)
+    (cond ((null? argstreams) #f)
+          ((stream-null? (car argstreams)) #t)
+          (else (any-stream-null? (cdr argstreams)))))
+  (if (any-stream-null? argstreams)
       the-empty-stream
       (cons-stream
        (apply proc (map (lambda (x) (car x)) argstreams))
