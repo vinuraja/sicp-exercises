@@ -41,7 +41,6 @@
          exp)
         ((variable? exp) 
          (lookup-variable-value exp env))
-        ;((is-primitive? exp) (primitive exp))
         ((get 'eval (exp-type exp))
          ((get 'eval (exp-type exp))
           exp
@@ -76,19 +75,6 @@
                  type: APPLY" 
                 procedure))))
 
-; Implemented this way to have some functional exercises.
-; Will be changed as we move forward in the chapter.
-(define (is-oneof? exp supported)
-  (cond ((null? supported) #f)
-        ((eq? exp (car supported)) #t)
-        (else (is-oneof? exp (cdr supported)))))
-(define (is-primitive? exp)
-  (and (not (pair? exp)) (is-oneof? exp '(+ cadr))))
-(define (primitive p)
-  (cond ((eq? p '+) +)
-        ((eq? p 'cadr) cadr)
-        (else (error "Unknown primitive: " p))))
-
 (define (install-quoted-package)
   (define (eval-quoted exp env)
     (text-of-quotation exp))
@@ -103,7 +89,7 @@
 
 (define (install-or-package)
   (define (eval-or exp env)
-    (eval-or-exps (and-exps exp) env))
+    (eval-or-exps (or-exps exp) env))
   (put 'eval 'or eval-or))
 (install-or-package)
 
@@ -137,6 +123,54 @@
     (eval (cond->if exp) env))
   (put 'eval 'cond eval-cond))
 (install-cond-package)
+
+(define (install-let-package)
+  (define (eval-let exp env)
+    (eval (let->combination exp) env))
+  (put 'eval 'let eval-let))
+(install-let-package)
+
+(define (install-let*-package)
+  (define (eval-let* exp env)
+    (eval (let*->nested-lets exp) env))
+  (put 'eval 'let* eval-let*))
+(install-let*-package)
+
+(define (make-let definitions body)
+  (list 'let definitions body))
+
+(define (let*-var-definitions exp)
+  (cadr exp))
+(define (let*-body exp)
+  (caddr exp))
+
+(define (let*->nested-lets exp)
+  (define (make-nested-lets definitions)
+    (if (null? (cdr definitions))
+        (make-let (list (car definitions))
+                  (let*-body exp))
+        (make-let (list (car definitions))
+                  (make-nested-lets (cdr definitions)))))
+  (make-nested-lets (let*-var-definitions exp)))
+
+(define (make-proc-call proc args)
+  (append (list proc) args))
+
+(define (let-var-definitions exp)
+  (cadr exp))
+
+(define (let-body exp)
+  (caddr exp))
+
+(define (let-vars exp)
+  (map (lambda (x) (car x)) (let-var-definitions exp)))
+
+(define (let-exps exp)
+  (map (lambda (x) (cadr x)) (let-var-definitions exp)))
+
+(define (let->combination exp)
+  (make-proc-call (make-lambda (let-vars exp) (let-body exp))
+                  (let-exps exp)))
 
 (define (tagged-list? exp tag)
   (if (pair? exp)
@@ -175,6 +209,8 @@
   (tagged-list? exp 'lambda))
 (define (lambda-parameters exp) (cadr exp))
 (define (lambda-body exp) (cddr exp))
+(define (make-lambda parameters body)
+  (list 'lambda parameters body))
 
 (define (and-exps exp)
   (cdr exp))
@@ -251,9 +287,9 @@
                           clauses)))
               ((cond-recipient-clause? first)
                (make-if (cond-predicate first)
-                        (make-singlearg-proc-call
+                        (make-proc-call
                          (cond-recipient-exp first)
-                         (cond-predicate first))
+                         (list (cond-predicate first)))
                         (expand-clauses
                          rest)))
               (else (make-if (cond-predicate first)
@@ -289,9 +325,6 @@
         (else (make-begin seq))))
 
 (define (make-begin seq) (cons 'begin seq))
-
-(define (make-singlearg-proc-call proc arg)
-  (cons proc (cons arg '())))
 
 (define (make-procedure parameters body env)
   (list 'procedure parameters body env))
@@ -381,7 +414,8 @@
         (list 'cadr cadr)
         (list 'cons cons)
         (list 'null? null?)
-        (list '+ +)))
+        (list '+ +)
+        (list '* *)))
 (define (primitive-procedure-names)
   (map car primitive-procedures))
 (define (primitive-procedure-objects)

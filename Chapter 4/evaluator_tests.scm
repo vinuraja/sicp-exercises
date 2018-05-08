@@ -18,3 +18,11 @@
 (check-equal? 2 (eval '(cond ('(b 2) => cadr) (else false)) genv))
 
 (check-equal? 3 (eval '((lambda (x) (+ 1 x)) 2) genv))
+(check-equal? 3 (eval '((lambda (x y) (+ y x)) 1 2) genv))
+(check-equal? 3 (eval '(let ((x 2)) (+ 1 x)) genv))
+(check-equal? 3 (eval '(let ((x 2) (y 1)) (+ y x)) genv))
+(check-equal? 39 (eval
+  '(let* ((x 3)
+          (y (+ x 2))
+          (z (+ x y 5)))
+     (* x z)) genv))
