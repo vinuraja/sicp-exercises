@@ -37,6 +37,9 @@
       #f))
 
 (define (eval exp env)
+; For debugging, uncomment below lines.
+;  (display exp)
+;  (newline)
   (cond ((self-evaluating? exp) 
          exp)
         ((variable? exp) 
@@ -168,9 +171,40 @@
 (define (let-exps exp)
   (map (lambda (x) (cadr x)) (let-var-definitions exp)))
 
+(define (named-let? exp)
+  (not (pair? (cadr exp))))
+
+(define (named-let-var exp)
+  (cadr exp))
+
+(define (named-let-vars exp)
+  (let-vars (cdr exp)))
+
+(define (named-let-exps exp)
+  (let-exps (cdr exp)))
+
+(define (named-let-body exp)
+  (cadddr exp))
+
+(define (make-definition var value)
+  (list 'define var value))
+
 (define (let->combination exp)
-  (make-proc-call (make-lambda (let-vars exp) (let-body exp))
-                  (let-exps exp)))
+  (if (named-let? exp)
+;      (make-begin (list (make-definition (named-let-var exp)
+;                                         (make-lambda (named-let-vars exp)
+;                                                      (named-let-body exp)))
+;                        (make-proc-call (named-let-var exp)
+;                                        (named-let-exps exp))))
+      (make-let (list (list 'rec-fn
+                            (make-lambda (append '(rec-fn) (named-let-vars exp))
+                                         (make-let (list (append (list (named-let-var exp))
+                                                                 (list (make-lambda (named-let-vars exp)
+                                                                              (append '(rec-fn rec-fn) (named-let-vars exp))))))
+                                                   (named-let-body exp)))))
+                (append '(rec-fn rec-fn) (named-let-exps exp)))
+      (make-proc-call (make-lambda (let-vars exp) (let-body exp))
+                      (let-exps exp))))
 
 (define (tagged-list? exp tag)
   (if (pair? exp)
@@ -415,7 +449,9 @@
         (list 'cons cons)
         (list 'null? null?)
         (list '+ +)
-        (list '* *)))
+        (list '* *)
+        (list '= =)
+        (list '- -)))
 (define (primitive-procedure-names)
   (map car primitive-procedures))
 (define (primitive-procedure-objects)

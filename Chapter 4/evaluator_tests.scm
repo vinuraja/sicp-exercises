@@ -22,7 +22,16 @@
 (check-equal? 3 (eval '(let ((x 2)) (+ 1 x)) genv))
 (check-equal? 3 (eval '(let ((x 2) (y 1)) (+ y x)) genv))
 (check-equal? 39 (eval
-  '(let* ((x 3)
-          (y (+ x 2))
-          (z (+ x y 5)))
-     (* x z)) genv))
+                  '(let* ((x 3)
+                          (y (+ x 2))
+                          (z (+ x y 5)))
+                     (* x z)) genv))
+(check-equal? 8 (eval '((lambda (n)
+                          (let fib-iter ((a 1) (b 0) (count n))
+                            (if (= count 0)
+                                b
+                                (fib-iter (+ a b) 
+                                          a 
+                                          (- count 1)))))
+                        6)
+                      genv))
