@@ -1,5 +1,5 @@
 ;#lang sicp
-(#%require racket/base)
+(#%require (only racket/base make-hash hash-set! hash-ref))
 
 (define h (make-hash))
 (define (put op type item)

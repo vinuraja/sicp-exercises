@@ -20,11 +20,14 @@
 (check-equal? 3 (eval '((lambda (x) (+ 1 x)) 2) genv))
 (check-equal? 3 (eval '((lambda (x y) (+ y x)) 1 2) genv))
 (check-equal? 3 (eval '(let ((x 2)) (+ 1 x)) genv))
-(check-equal? 3 (eval '(let ((x 2) (y 1)) (+ y x)) genv))
+(check-equal? 3 (eval '(let ((x 2) (y 1))
+                         (= x 3) ; verifies multiple statement support
+                         (+ y x)) genv))
 (check-equal? 39 (eval
                   '(let* ((x 3)
                           (y (+ x 2))
                           (z (+ x y 5)))
+                     (= x 4) ; verifies multiple statement support
                      (* x z)) genv))
 (check-equal? 8 (eval '((lambda (n)
                           (let fib-iter ((a 1) (b 0) (count n))
@@ -35,3 +38,34 @@
                                           (- count 1)))))
                         6)
                       genv))
+(check-equal? 8 (eval '((lambda (n)
+                          (let fib-iter ((a 1) (b 0) (count n))
+                            (= a 0) ; verifies multiple statement support
+                            (if (= count 0)
+                                b
+                                (fib-iter (+ a b) 
+                                          a 
+                                          (- count 1)))))
+                        6)
+                      genv))
+(check-equal? 'ok (eval '(define (append x y)
+                           (if (null? x)
+                               y
+                               (cons (car x) (append (cdr x) y)))) genv))
+(check-equal? '(a b c d e f) (eval '(append '(a b c) '(d e f)) genv))
+(check-equal? 'ok (eval '(define (map f x)
+                             (if (null? x)
+                                 '()
+                                 (cons (f (car x)) (map f (cdr x))))) genv))
+(check-equal? '(2 4 6 8) (eval '(map (lambda (x) (* 2 x)) '(1 2 3 4)) genv))
+(check-equal? 'ok (eval '(define (map-even? x)
+                           (define (even? n)
+                             (if (= n 0)
+                                 true
+                                 (odd? (- n 1))))
+                           (define (odd? n)
+                             (if (= n 0)
+                                 false
+                                 (even? (- n 1))))
+                           (map even? x)) genv))
+(check-equal? '(#f #t #f #t) (eval '(map-even? '(1 2 3 4)) genv))

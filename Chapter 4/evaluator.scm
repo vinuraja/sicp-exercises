@@ -37,25 +37,30 @@
       #f))
 
 (define (eval exp env)
-; For debugging, uncomment below lines.
-;  (display exp)
-;  (newline)
-  (cond ((self-evaluating? exp) 
-         exp)
-        ((variable? exp) 
-         (lookup-variable-value exp env))
-        ((get 'eval (exp-type exp))
-         ((get 'eval (exp-type exp))
-          exp
-          env))
-        ((application? exp)
-         (evaluator-apply (eval (operator exp) env)
-                          (list-of-values 
-                           (operands exp) 
-                           env)))
-        (else
-         (error "Unknown expression 
-                 type: EVAL" exp))))
+  ; For debugging, uncomment below lines.
+  ;(display exp)
+  ;(display "=>")
+  ;(newline)
+  (let ((evaled-exp (cond ((self-evaluating? exp) 
+                           exp)
+                          ((variable? exp) 
+                           (lookup-variable-value exp env))
+                          ((get 'eval (exp-type exp))
+                           ((get 'eval (exp-type exp))
+                            exp
+                            env))
+                          ((application? exp)
+                           (evaluator-apply (eval (operator exp) env)
+                                            (list-of-values 
+                                             (operands exp) 
+                                             env)))
+                          (else
+                           (error "Unknown expression 
+                 type: EVAL" exp)))))
+    ; For debugging, uncomment below lines.
+    ;(display evaled-exp)
+    ;(newline)
+    evaled-exp))
 
 ; Can't be called apply, because we use the underlying Scheme's 'apply'
 ; method to run primitive procedures.
@@ -77,6 +82,43 @@
          (error "Unknown procedure 
                  type: APPLY" 
                 procedure))))
+
+(define (assignment-variable exp) 
+  (cadr exp))
+
+(define (assignment-value exp) (caddr exp))
+
+(define (definition-variable exp)
+  (if (symbol? (cadr exp))
+      (cadr exp)
+      (caadr exp)))
+
+(define (definition-value exp)
+  (if (symbol? (cadr exp))
+      (caddr exp)
+      (make-lambda 
+       (cdadr exp)    ; formal parameters
+       (cddr exp)))) ; body
+
+(define (install-assignment-package)
+  (define (eval-assignment exp env)
+    (set-variable-value! 
+     (assignment-variable exp)
+     (eval (assignment-value exp) env)
+     env)
+    'ok)
+  (put 'eval 'set! eval-assignment))
+(install-assignment-package)
+
+(define (install-definition-package)
+  (define (eval-definition exp env)
+    (define-variable! 
+      (definition-variable exp)
+      (eval (definition-value exp) env)
+      env)
+    'ok)
+  (put 'eval 'define eval-definition))
+(install-definition-package)
 
 (define (install-quoted-package)
   (define (eval-quoted exp env)
@@ -140,12 +182,12 @@
 (install-let*-package)
 
 (define (make-let definitions body)
-  (list 'let definitions body))
+  (cons 'let (cons definitions body)))
 
 (define (let*-var-definitions exp)
   (cadr exp))
 (define (let*-body exp)
-  (caddr exp))
+  (cddr exp))
 
 (define (let*->nested-lets exp)
   (define (make-nested-lets definitions)
@@ -153,7 +195,7 @@
         (make-let (list (car definitions))
                   (let*-body exp))
         (make-let (list (car definitions))
-                  (make-nested-lets (cdr definitions)))))
+                  (list (make-nested-lets (cdr definitions))))))
   (make-nested-lets (let*-var-definitions exp)))
 
 (define (make-proc-call proc args)
@@ -163,7 +205,7 @@
   (cadr exp))
 
 (define (let-body exp)
-  (caddr exp))
+  (cddr exp))
 
 (define (let-vars exp)
   (map (lambda (x) (car x)) (let-var-definitions exp)))
@@ -184,25 +226,26 @@
   (let-exps (cdr exp)))
 
 (define (named-let-body exp)
-  (cadddr exp))
+  (cdddr exp))
 
 (define (make-definition var value)
   (list 'define var value))
 
 (define (let->combination exp)
   (if (named-let? exp)
-;      (make-begin (list (make-definition (named-let-var exp)
-;                                         (make-lambda (named-let-vars exp)
-;                                                      (named-let-body exp)))
-;                        (make-proc-call (named-let-var exp)
-;                                        (named-let-exps exp))))
+      ;      (make-begin (list (make-definition (named-let-var exp)
+      ;                                         (make-lambda (named-let-vars exp)
+      ;                                                      (named-let-body exp)))
+      ;                        (make-proc-call (named-let-var exp)
+      ;                                        (named-let-exps exp))))
       (make-let (list (list 'rec-fn
                             (make-lambda (append '(rec-fn) (named-let-vars exp))
-                                         (make-let (list (append (list (named-let-var exp))
+                                         (list (make-let (list (append (list (named-let-var exp))
                                                                  (list (make-lambda (named-let-vars exp)
-                                                                              (append '(rec-fn rec-fn) (named-let-vars exp))))))
-                                                   (named-let-body exp)))))
-                (append '(rec-fn rec-fn) (named-let-exps exp)))
+                                                                                    (list (append '(rec-fn rec-fn)
+                                                                                            (named-let-vars exp)))))))
+                                                   (named-let-body exp))))))
+                (list (append '(rec-fn rec-fn) (named-let-exps exp))))
       (make-proc-call (make-lambda (let-vars exp) (let-body exp))
                       (let-exps exp))))
 
@@ -217,6 +260,9 @@
         (else false)))
 
 (define (variable? exp) (symbol? exp))
+
+(define (definition? exp)
+  (tagged-list? exp 'define))
 
 (define (quoted? exp)
   (tagged-list? exp 'quote))
@@ -244,7 +290,7 @@
 (define (lambda-parameters exp) (cadr exp))
 (define (lambda-body exp) (cddr exp))
 (define (make-lambda parameters body)
-  (list 'lambda parameters body))
+  (cons 'lambda (cons parameters body)))
 
 (define (and-exps exp)
   (cdr exp))
@@ -360,8 +406,29 @@
 
 (define (make-begin seq) (cons 'begin seq))
 
+(define (filter pred? lst)
+  (cond ((null? lst) '())
+        ((pred? (car lst)) (cons (car lst) (filter pred? (cdr lst))))
+        (else (filter pred? (cdr lst)))))
+
+(define (scan-out-defines body)
+  (let ((vars (map definition-variable (filter definition? body)))
+        (vals (map definition-value (filter definition? body)))
+        (rest-of-body (filter (lambda (exp)
+                                (not (definition? exp))) body)))
+    (if (null? vars)
+        body
+        ; The incoming body is a list, so we expect to return
+        ; a list as well.
+        (list (make-let (map (lambda (var)
+                         (list var ''*unassigned*)) vars)
+                  (append
+                   (map (lambda (var val)
+                          (list 'set! var val)) vars vals)
+                   rest-of-body))))))
+
 (define (make-procedure parameters body env)
-  (list 'procedure parameters body env))
+  (list 'procedure parameters (scan-out-defines body) env))
 (define (compound-procedure? p)
   (tagged-list? p 'procedure))
 (define (procedure-parameters p) (cadr p))
@@ -406,7 +473,11 @@
         (let ((frame (first-frame env)))
           (scan (frame-variables frame)
                 (frame-values frame)))))
-  (env-loop env))
+  (let ((val (env-loop env)))
+    (if (eq? val '*unassigned*)
+        (error "Unassigned variable" var)
+        val)))
+      
 
 (define (set-variable-value! var val env)
   (define (env-loop env)
@@ -469,10 +540,39 @@
           (primitive-procedure-names)
           (primitive-procedure-objects)
           the-empty-environment)))
-    ;(define-variable! 'true true initial-env)
-    ;(define-variable! 'false false initial-env)
+    (define-variable! 'true true initial-env)
+    (define-variable! 'false false initial-env)
     initial-env))
 
 (define the-global-environment 
   (setup-environment))
 (define genv the-global-environment)
+
+(define input-prompt  ";;; M-Eval input:")
+(define output-prompt ";;; M-Eval value:")
+
+(define (driver-loop)
+  (prompt-for-input input-prompt)
+  (let ((input (read)))
+    (let ((output 
+           (eval input 
+                 the-global-environment)))
+      (announce-output output-prompt)
+      (user-print output)))
+  (driver-loop))
+
+(define (prompt-for-input string)
+  (newline) (newline) 
+  (display string) (newline))
+
+(define (announce-output string)
+  (newline) (display string) (newline))
+
+(define (user-print object)
+  (if (compound-procedure? object)
+      (display 
+       (list 'compound-procedure
+             (procedure-parameters object)
+             (procedure-body object)
+             '<procedure-env>))
+      (display object)))
