@@ -181,6 +181,12 @@
   (put 'eval 'let* eval-let*))
 (install-let*-package)
 
+(define (install-letrec-package)
+  (define (eval-letrec exp env)
+    (eval (letrec->let exp) env))
+  (put 'eval 'letrec eval-letrec))
+(install-letrec-package)
+
 (define (make-let definitions body)
   (cons 'let (cons definitions body)))
 
@@ -212,6 +218,15 @@
 
 (define (let-exps exp)
   (map (lambda (x) (cadr x)) (let-var-definitions exp)))
+
+(define (letrec-body exp)
+  (let-body exp))
+
+(define (letrec-vars exp)
+  (let-vars exp))
+
+(define (letrec-exps exp)
+  (let-exps exp))
 
 (define (named-let? exp)
   (not (pair? (cadr exp))))
@@ -248,6 +263,13 @@
                 (list (append '(rec-fn rec-fn) (named-let-exps exp))))
       (make-proc-call (make-lambda (let-vars exp) (let-body exp))
                       (let-exps exp))))
+
+(define (letrec->let exp)
+  (make-let (map (lambda (var)
+                   (list var ''*unassigned)) (letrec-vars exp))
+            (append (map (lambda (var val)
+                           (list 'set! var val)) (letrec-vars exp) (letrec-exps exp))
+                    (letrec-body exp))))
 
 (define (tagged-list? exp tag)
   (if (pair? exp)

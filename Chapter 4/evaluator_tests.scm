@@ -54,9 +54,9 @@
                                (cons (car x) (append (cdr x) y)))) genv))
 (check-equal? '(a b c d e f) (eval '(append '(a b c) '(d e f)) genv))
 (check-equal? 'ok (eval '(define (map f x)
-                             (if (null? x)
-                                 '()
-                                 (cons (f (car x)) (map f (cdr x))))) genv))
+                           (if (null? x)
+                               '()
+                               (cons (f (car x)) (map f (cdr x))))) genv))
 (check-equal? '(2 4 6 8) (eval '(map (lambda (x) (* 2 x)) '(1 2 3 4)) genv))
 (check-equal? 'ok (eval '(define (map-even? x)
                            (define (even? n)
@@ -69,3 +69,23 @@
                                  (even? (- n 1))))
                            (map even? x)) genv))
 (check-equal? '(#f #t #f #t) (eval '(map-even? '(1 2 3 4)) genv))
+(check-equal? 3628800 (eval '(letrec
+                                 ((fact
+                                   (lambda (n)
+                                     (if (= n 1)
+                                         1
+                                         (* n (fact (- n 1)))))))
+                               (fact 10)) genv))
+(check-equal? '(#f #t #f #t) (eval '((lambda (x)
+                                       (letrec
+                                           ((even?
+                                             (lambda (n)
+                                               (if (= n 0)
+                                                   true
+                                                   (odd? (- n 1)))))
+                                            (odd?
+                                             (lambda (n)
+                                               (if (= n 0)
+                                                   false
+                                                   (even? (- n 1))))))
+                                         (map even? x))) '(1 2 3 4)) genv))
