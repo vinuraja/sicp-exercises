@@ -1,6 +1,7 @@
 ;#lang sicp
 (#%require racket/include)
 (include "table.scm")
+(#%require (only racket/base time))
 
 (define (eval-old exp env)
   (cond ((self-evaluating? exp) 

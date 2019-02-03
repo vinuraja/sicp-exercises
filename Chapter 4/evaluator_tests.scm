@@ -4,11 +4,22 @@
   ;'vanilla)
   'analyze)
 
+(define timer?
+  ;#t)
+  #f)
 
 (define (eval exp env)
-  (if (eq? eval-type 'vanilla)
-      (vanilla-eval exp env)
-      (analyze-eval exp env)))
+  (define (eval-impl)
+    (if (eq? eval-type 'vanilla)
+        (vanilla-eval exp env)
+        (analyze-eval exp env)))
+  (if timer?
+      ; Only top-most eval will be timed.
+      (begin (set! timer? #f)
+             (let ((timed-eval (time (eval-impl))))
+               (set! timer? #t)
+               timed-eval))
+      (eval-impl)))
 
 (if (eq? eval-type 'vanilla)
     (begin
