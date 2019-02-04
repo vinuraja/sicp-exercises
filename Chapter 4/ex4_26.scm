@@ -1,4 +1,4 @@
-#lang racket
+#lang sicp
 
 ; The current vanilla eval evaluates the if condition lazily,
 ; ie, the alternative is evaluated only if the predicate is false,
@@ -7,7 +7,6 @@
 
 (#%require racket/include)
 (#%require rackunit)
-(#%require (only racket/base foldr))
 
 (include "evaluator.scm")
 
