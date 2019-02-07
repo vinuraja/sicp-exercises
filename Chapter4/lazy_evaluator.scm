@@ -71,6 +71,11 @@
 (define (thunk-value evaluated-thunk) 
   (cadr evaluated-thunk))
 
+;(define (force-it obj)
+;  (if (thunk? obj)
+;      (actual-value (thunk-exp obj) (thunk-env obj))
+;      obj))
+
 (define (force-it obj)
   (cond ((thunk? obj)
          (let ((result
@@ -78,9 +83,9 @@
                  (thunk-exp obj)
                  (thunk-env obj))))
            (set-car! obj 'evaluated-thunk)
-           ;; replace exp with its value:
+           ; replace exp with its value:
            (set-car! (cdr obj) result) 
-           ;; forget unneeded env:
+           ; forget unneeded env:
            (set-cdr! (cdr obj) '()) 
            result))
         ((evaluated-thunk? obj)
@@ -608,6 +613,9 @@
         (list 'cadr cadr)
         (list 'cons cons)
         (list 'null? null?)
+        (list 'display display)
+        (list 'newline newline)
+        (list 'list list)
         (list '+ +)
         (list '* *)
         (list '= =)
