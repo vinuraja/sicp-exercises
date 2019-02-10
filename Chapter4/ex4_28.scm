@@ -1,7 +1,7 @@
 #lang sicp
 (#%require racket/include)
 (include "lazy_evaluator.scm")
-;(include "lazy_evaluator_tests.scm")
+(include "lazy_evaluator_tests.scm")
 
 (#%require rackunit)
 (eval '(define (f pred v)

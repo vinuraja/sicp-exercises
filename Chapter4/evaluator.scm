@@ -51,10 +51,9 @@
                             exp
                             env))
                           ((application? exp)
-                           (evaluator-apply (eval (operator exp) env)
-                                            (list-of-values 
-                                             (operands exp) 
-                                             env)))
+                           (evaluator-apply (actual-value (operator exp) env)
+                                            (operands exp)
+                                            env))
                           (else
                            (error "Unknown expression 
                  type: EVAL" exp)))))
@@ -63,26 +62,97 @@
     ;(newline)
     evaled-exp))
 
+(define (actual-value exp env)
+  (force-it (eval exp env)))
+
+(define (evaluated-thunk? obj)
+  (tagged-list? obj 'evaluated-thunk))
+
+(define (thunk-value evaluated-thunk) 
+  (cadr evaluated-thunk))
+
+(define (force-it obj)
+  (cond ((thunk-memo? obj)
+         (let ((result
+                (actual-value 
+                 (thunk-exp obj)
+                 (thunk-env obj))))
+           (set-car! obj 'evaluated-thunk)
+           ; replace exp with its value:
+           (set-car! (cdr obj) result) 
+           ; forget unneeded env:
+           (set-cdr! (cdr obj) '()) 
+           result))
+        ((evaluated-thunk? obj)
+         (thunk-value obj))
+        ((thunk? obj)
+         (actual-value
+          (thunk-exp obj)
+          (thunk-env obj)))
+        (else obj)))
+
+(define (delay-it exp env)
+  (list 'thunk exp env))
+(define (delay-it-memo exp env)
+  (list 'thunk-memo exp env))
+(define (thunk? obj) (tagged-list? obj 'thunk))
+(define (thunk-memo? obj) (tagged-list? obj 'thunk-memo))
+(define (thunk-exp thunk) (cadr thunk))
+(define (thunk-env thunk) (caddr thunk))
+
+(define (list-of-arg-values exps env)
+  (if (no-operands? exps)
+      '()
+      (cons (actual-value 
+             (first-operand exps) 
+             env)
+            (list-of-arg-values 
+             (rest-operands exps)
+             env))))
+
+(define (arg param exp env)
+  (cond ((and (pair? param)
+              (eq? (cadr param) 'lazy))
+         (delay-it exp env))
+        ((and (pair? param)
+              (eq? (cadr param) 'lazy-memo))
+         (delay-it-memo exp env))
+        (else (actual-value exp env))))
+
+(define (list-of-args params exps env)
+  (if (no-operands? exps)
+      '()
+      (cons (arg
+             (first-operand params)
+             (first-operand exps) 
+             env)
+            (list-of-args
+             (rest-operands params)
+             (rest-operands exps)
+             env))))
+
 ; Can't be called apply, because we use the underlying Scheme's 'apply'
 ; method to run primitive procedures.
-(define (evaluator-apply procedure arguments)
+(define (evaluator-apply procedure arguments env)
   (cond ((primitive-procedure? procedure)
-         (apply-primitive-procedure 
-          procedure 
-          arguments))
+         (apply-primitive-procedure
+          procedure
+          (list-of-arg-values 
+           arguments 
+           env)))  ; changed
         ((compound-procedure? procedure)
          (eval-sequence
           (procedure-body procedure)
           (extend-environment
-           (procedure-parameters 
-            procedure)
-           arguments
-           (procedure-environment 
-            procedure))))
-        (else
-         (error "Unknown procedure 
-                 type: APPLY" 
-                procedure))))
+           (procedure-parameter-names procedure)
+           (list-of-args
+            (procedure-parameters procedure)
+            arguments 
+            env)   ; changed
+           (procedure-environment procedure))))
+        (else (error "Unknown procedure 
+                      type: APPLY" 
+                     procedure))))
 
 (define (assignment? exp)
   (tagged-list? exp 'set!))
@@ -143,7 +213,7 @@
 (install-or-package)
 
 (define (eval-if exp env)
-  (if (true? (eval (if-predicate exp) env))
+  (if (true? (actual-value (if-predicate exp) env))
       (eval (if-consequent exp) env)
       (eval (if-alternative exp) env)))
 (define (install-if-package)
@@ -263,10 +333,10 @@
       (make-let (list (list 'rec-fn
                             (make-lambda (append '(rec-fn) (named-let-vars exp))
                                          (list (make-let (list (append (list (named-let-var exp))
-                                                                 (list (make-lambda (named-let-vars exp)
-                                                                                    (list (append '(rec-fn rec-fn)
-                                                                                            (named-let-vars exp)))))))
-                                                   (named-let-body exp))))))
+                                                                       (list (make-lambda (named-let-vars exp)
+                                                                                          (list (append '(rec-fn rec-fn)
+                                                                                                        (named-let-vars exp)))))))
+                                                         (named-let-body exp))))))
                 (list (append '(rec-fn rec-fn) (named-let-exps exp))))
       (make-proc-call (make-lambda (let-vars exp) (let-body exp))
                       (let-exps exp))))
@@ -361,7 +431,7 @@
   (cond ((last-exp? exps) 
          (eval (first-exp exps) env))
         (else 
-         (eval (first-exp exps) env)
+         (actual-value (first-exp exps) env)
          (eval-sequence (rest-exps exps) 
                         env))))
 
@@ -450,11 +520,11 @@
         ; The incoming body is a list, so we expect to return
         ; a list as well.
         (list (make-let (map (lambda (var)
-                         (list var ''*unassigned*)) vars)
-                  (append
-                   (map (lambda (var val)
-                          (list 'set! var val)) vars vals)
-                   rest-of-body))))))
+                               (list var ''*unassigned*)) vars)
+                        (append
+                         (map (lambda (var val)
+                                (list 'set! var val)) vars vals)
+                         rest-of-body))))))
 
 (define (make-procedure parameters body env)
   (list 'procedure parameters (scan-out-defines body) env))
@@ -463,6 +533,11 @@
 (define (compound-procedure? p)
   (tagged-list? p 'procedure))
 (define (procedure-parameters p) (cadr p))
+(define (procedure-parameter-names p)
+  (map (lambda (param)
+         (if (pair? param)
+             (car param)
+             param)) (cadr p)))
 (define (procedure-body p) (caddr p))
 (define (procedure-environment p) (cadddr p))
 
@@ -550,6 +625,10 @@
         (list 'cadr cadr)
         (list 'cons cons)
         (list 'null? null?)
+        (list 'display display)
+        (list 'newline newline)
+        (list 'list list)
+        (list '/ /)
         (list '+ +)
         (list '* *)
         (list '= =)
@@ -585,9 +664,9 @@
 (define (driver-loop)
   (prompt-for-input input-prompt)
   (let ((input (read)))
-    (let ((output 
-           (eval input 
-                 the-global-environment)))
+    (let ((output (actual-value 
+                   input 
+                   the-global-environment)))
       (announce-output output-prompt)
       (user-print output)))
   (driver-loop))
@@ -603,7 +682,7 @@
   (if (compound-procedure? object)
       (display 
        (list 'compound-procedure
-             (procedure-parameters object)
+             ( object)
              (procedure-body object)
              '<procedure-env>))
       (display object)))
@@ -714,7 +793,7 @@
         ((compound-procedure? proc)
          ((procedure-body proc)
           (extend-environment 
-           (procedure-parameters proc)
+           (procedure-parameter-names proc)
            args
            (procedure-environment proc))))
         (else (error "Unknown procedure type: 

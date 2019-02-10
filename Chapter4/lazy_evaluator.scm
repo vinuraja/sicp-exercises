@@ -1,7 +1,6 @@
 ;#lang sicp
 (#%require racket/include)
 (include "table.scm")
-(#%require (only racket/base time))
 
 (define (eval-old exp env)
   (cond ((self-evaluating? exp) 
@@ -39,9 +38,9 @@
 
 (define (eval exp env)
   ; For debugging, uncomment below lines.
-  ;(display exp)
-  ;(display "=>")
-  ;(newline)
+  ;  (display exp)
+  ;  (display "=>")
+  ;  (newline)
   (let ((evaled-exp (cond ((self-evaluating? exp) 
                            exp)
                           ((variable? exp) 
@@ -55,11 +54,12 @@
                                             (operands exp)
                                             env))
                           (else
-                           (error "Unknown expression 
-                 type: EVAL" exp)))))
+                           (error "Unknown expression type: EVAL " exp)))))
     ; For debugging, uncomment below lines.
-    ;(display evaled-exp)
-    ;(newline)
+    ;    (display "evaled: ")
+    ;    (newline)
+    ;    (display evaled-exp)
+    ;    (newline)
     evaled-exp))
 
 (define (actual-value exp env)
@@ -158,7 +158,7 @@
       (caddr exp)
       (make-lambda 
        (cdadr exp)    ; formal parameters
-       (cddr exp)))) ; body
+       (cddr exp))))  ; body
 
 (define (install-assignment-package)
   (define (eval-assignment exp env)
@@ -182,7 +182,7 @@
 
 (define (install-quoted-package)
   (define (eval-quoted exp env)
-    (text-of-quotation exp))
+    (text-of-quotation exp env))
   (put 'eval 'quote eval-quoted))
 (install-quoted-package)
 
@@ -209,11 +209,17 @@
 
 (define (install-lambda-package)
   (define (eval-lambda exp env)
-    (make-procedure
-     (lambda-parameters exp)
-     (lambda-body exp)
-     env))
-  (put 'eval 'lambda eval-lambda))
+    (if (cons-lambda? exp)
+        (make-cons-procedure
+         (lambda-parameters exp)
+         (lambda-body exp)
+         env)
+        (make-procedure
+         (lambda-parameters exp)
+         (lambda-body exp)
+         env)))
+  (put 'eval 'lambda eval-lambda)
+  (put 'eval 'cons-lambda eval-lambda))
 (install-lambda-package)
 
 (define (install-begin-package)
@@ -359,8 +365,16 @@
 (define (quoted? exp)
   (tagged-list? exp 'quote))
 
-(define (text-of-quotation exp)
-  (cadr exp))
+(define (accumulate op init lst)
+  (if (null? lst)
+      init
+      (op (car lst) (accumulate op init (cdr lst)))))
+      
+(define (text-of-quotation exp env)
+  (if (pair? (cadr exp))
+      (delay-it (accumulate (lambda (x acc)
+                              (list 'cons (list 'quote x) acc)) (list 'quote '()) (cadr exp)) env)
+      (cadr exp)))
 
 (define (if? exp) (tagged-list? exp 'if))
 (define (if-predicate exp) (cadr exp))
@@ -379,8 +393,12 @@
 
 (define (lambda? exp) 
   (tagged-list? exp 'lambda))
+(define (cons-lambda? exp)
+  (tagged-list? exp 'cons-lambda))
 (define (lambda-parameters exp) (cadr exp))
 (define (lambda-body exp) (cddr exp))
+(define (make-cons-lambda parameters body)
+  (cons 'cons-lambda (cons parameters body)))
 (define (make-lambda parameters body)
   (cons 'lambda (cons parameters body)))
 
@@ -518,16 +536,21 @@
                          (map (lambda (var val)
                                 (list 'set! var val)) vars vals)
                          rest-of-body))))))
-
+        
+(define (make-cons-procedure parameters body env)
+  (list 'procedure 'cons parameters body env))
+(define (cons-procedure? p)
+  (and (compound-procedure? p)
+       (tagged-list? (cdr p) 'cons)))
 (define (make-procedure parameters body env)
-  (list 'procedure parameters (scan-out-defines body) env))
+  (list 'procedure 'none parameters (scan-out-defines body) env))
 (define (make-procedure-analyze parameters body env)
-  (list 'procedure parameters body env))
+  (list 'procedure 'none parameters body env))
 (define (compound-procedure? p)
   (tagged-list? p 'procedure))
-(define (procedure-parameters p) (cadr p))
-(define (procedure-body p) (caddr p))
-(define (procedure-environment p) (cadddr p))
+(define (procedure-parameters p) (caddr p))
+(define (procedure-body p) (cadddr p))
+(define (procedure-environment p) (car (cddddr p)))
 
 (define (enclosing-environment env) (cdr env))
 (define (first-frame env) (car env))
@@ -616,6 +639,7 @@
         (list 'display display)
         (list 'newline newline)
         (list 'list list)
+        (list '/ /)
         (list '+ +)
         (list '* *)
         (list '= =)
@@ -665,11 +689,41 @@
 (define (announce-output string)
   (newline) (display string) (newline))
 
+(define (apply-proc-on-cons proc cons-p)
+  (force-it (eval-sequence
+             (procedure-body proc)
+             (extend-environment
+              (procedure-parameters proc)
+              (list cons-p)   ; changed
+              (procedure-environment proc)))))
+
+(define (apply-car-p cons-p env)
+  (let ((car-p (lookup-variable-value 'car env)))
+    (apply-proc-on-cons car-p cons-p)))
+
+(define (apply-cdr-p cons-p env)
+  (let ((cdr-p (lookup-variable-value 'cdr env)))
+    (apply-proc-on-cons cdr-p cons-p)))
+  
+(define (print-cons cons-p)
+  (define (print-cons-impl cons-proc n prvly-printed?)
+    (cond ((null? cons-proc) (display ")"))
+          ((= n 0) (display " ...)"))
+          (else (if prvly-printed?
+                    (display " "))
+                (display (apply-car-p cons-proc genv))
+                (print-cons-impl (apply-cdr-p cons-proc genv) (- n 1) #t))))
+  (display "(")
+  ; We print only the first 5 elements of a list.
+  (print-cons-impl cons-p 5 #f))
+
 (define (user-print object)
-  (if (compound-procedure? object)
-      (display 
-       (list 'compound-procedure
-             (procedure-parameters object)
-             (procedure-body object)
-             '<procedure-env>))
-      (display object)))
+  (cond ((cons-procedure? object)
+         (print-cons object))
+        ((compound-procedure? object)
+         (display 
+          (list 'compound-procedure
+                (procedure-parameters object)
+                (procedure-body object)
+                '<procedure-env>)))
+        (else (display object))))

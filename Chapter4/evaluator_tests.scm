@@ -1,8 +1,8 @@
 (#%require rackunit)
 
 (define eval-type
-  ;'vanilla)
-  'analyze)
+  'vanilla)
+  ;'analyze)
 
 (define timer?
   ;#t)
@@ -119,3 +119,13 @@
                                                          false
                                                          (even? (- n 1))))))
                                                (map even? x))) '(1 2 3 4)) genv))))
+
+(if (eq? eval-type 'vanilla)
+    (begin
+      ; Testing laziness specifically: notice (/ 1 0).
+      (check-equal?
+       1
+       (eval '((lambda (a (b lazy)) (if (= a 0) 1 b)) 0 (/ 1 0)) genv))
+      (check-equal?
+       1
+       (eval '((lambda (a (b lazy-memo)) (if (= a 0) 1 b)) 0 (/ 1 0)) genv))))

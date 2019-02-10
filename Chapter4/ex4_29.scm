@@ -22,9 +22,9 @@
 ; force-it in lazy_evaluator.scm.
 
 ; memoization
-;(check-equal? (eval '(square (id 10)) genv) 100)
-;(check-equal? (eval 'count genv) 1)
+(check-equal? (eval '(square (id 10)) genv) 100)
+(check-equal? (eval 'count genv) 1)
 
 ; no memoization
-(check-equal? (eval '(square (id 10)) genv) 100)
-(check-equal? (eval 'count genv) 2)
+;(check-equal? (eval '(square (id 10)) genv) 100)
+;(check-equal? (eval 'count genv) 2)

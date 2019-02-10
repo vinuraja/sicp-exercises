@@ -11,7 +11,8 @@
 (check-equal? 0 (eval '(or 0 1) genv))
 
 (check-equal? 3 (eval (+ 1 2) genv))
-(check-equal? '(+ 1 2) (eval ''(+ 1 2) genv))
+(check-equal? '() (force-it (eval ''() genv)))
+(check-equal? '(+ 1 2) (force-it (eval ''(+ 1 2) genv)))
 (check-equal? 3 (eval '(+ 1 2) genv))
 
 (check-equal? 5 (eval '(cond (1 (+ 2 3)) (else false)) genv))
@@ -32,27 +33,25 @@
                      (= x 4) ; verifies multiple statement support
                      (* x z)) genv))
 
-; Won't work with lazy evaluation for some reason which I haven't
-; put time into figuring out yet!
-;(check-equal? 8 (eval '((lambda (n)
-;                          (let fib-iter ((a 1) (b 0) (count n))
-;                            (if (= count 0)
-;                                b
-;                                (fib-iter (+ a b) 
-;                                          a 
-;                                          (- count 1)))))
-;                        6)
-;                      genv))
-;(check-equal? 8 (eval '((lambda (n)
-;                          (let fib-iter ((a 1) (b 0) (count n))
-;                            (= a 0) ; verifies multiple statement support
-;                            (if (= count 0)
-;                                b
-;                                (fib-iter (+ a b) 
-;                                          a 
-;                                          (- count 1)))))
-;                        6)
-;                      genv))
+(check-equal? 8 (force-it (eval '((lambda (n)
+                                    (let fib-iter ((a 1) (b 0) (count n))
+                                      (if (= count 0)
+                                          b
+                                          (fib-iter (+ a b) 
+                                                    a 
+                                                    (- count 1)))))
+                                  6)
+                                genv)))
+(check-equal? 8 (force-it (eval '((lambda (n)
+                                    (let fib-iter ((a 1) (b 0) (count n))
+                                      (= a 0) ; verifies multiple statement support
+                                      (if (= count 0)
+                                          b
+                                          (fib-iter (+ a b) 
+                                                    a 
+                                                    (- count 1)))))
+                                  6)
+                                genv)))
 
 (check-equal? 'ok (eval '(define (append x y)
                            (if (null? x)
