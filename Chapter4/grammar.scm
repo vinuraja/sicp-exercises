@@ -1,4 +1,4 @@
-#lang sicp
+;#lang sicp
 
 (#%require racket/include)
 (include "amb.scm")
@@ -70,10 +70,6 @@
 
 (define (parse input)
   (let ((sent (parse-sentence input)))
-    (display ">>")
-    (newline)
-    (display (car sent))
-    (newline)
     (require (null? (cdr sent)))
     (car sent)))
 
