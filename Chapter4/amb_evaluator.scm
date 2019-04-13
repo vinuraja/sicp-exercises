@@ -8,8 +8,16 @@
       (car exp)
       #f))
 
+(define (require? exp)
+  (tagged-list? exp 'require))
+(define (require-predicate exp)
+  (cadr exp))
+
 (define (assignment? exp)
   (tagged-list? exp 'set!))
+
+(define (permanent-assignment? exp)
+  (tagged-list? exp 'permanent-set!))
 
 (define (assignment-variable exp) 
   (cadr exp))
@@ -130,6 +138,10 @@
 
 (define (text-of-quotation exp)
   (cadr exp))
+
+(define (if-fail? exp) (tagged-list? exp 'if-fail))
+(define (if-fail-failable exp) (cadr exp))
+(define (if-fail-alternative exp) (caddr exp))
 
 (define (if? exp) (tagged-list? exp 'if))
 (define (if-predicate exp) (cadr exp))
@@ -320,6 +332,20 @@
     (scan (frame-variables frame)
           (frame-values frame))))
 
+(define (square x)
+  (* x x))
+
+(define (smallest-div n) 
+  (define (divides? a b) 
+    (= 0 (modulo b a))) 
+  (define (find-div n test) 
+    (cond ((> (square test) n) n) ((divides? test n) test) 
+          (else (find-div n (+ test 1))))) 
+  (find-div n 2)) 
+  
+(define (prime? n) 
+  (if (= n 1) false (= n (smallest-div n))))
+
 (define (primitive-procedure? proc)
   (tagged-list? proc 'primitive))
 (define (primitive-implementation proc) 
@@ -330,10 +356,13 @@
         (list 'cadr cadr)
         (list 'cons cons)
         (list 'null? null?)
+        (list 'eq? eq?)
         (list 'display display)
         (list 'newline newline)
         (list 'list list)
         (list 'not not)
+        (list 'modulo modulo)
+        (list 'prime? prime?)
         (list '/ /)
         (list '+ +)
         (list '* *)
@@ -423,6 +452,9 @@
 (define (amb? exp) (tagged-list? exp 'amb))
 (define (amb-choices exp) (cdr exp))
 
+(define (ramb? exp) (tagged-list? exp 'ramb))
+(define (ramb-choices exp) (cdr exp))
+
 (define (ambeval exp env succeed fail)
   ((analyze exp) env succeed fail))
 
@@ -435,10 +467,14 @@
          (analyze-variable exp))
         ((assignment? exp) 
          (analyze-assignment exp))
+        ((permanent-assignment? exp)
+         (analyze-permanent-assignment exp))
         ((definition? exp) 
          (analyze-definition exp))
         ((if? exp) 
          (analyze-if exp))
+        ((if-fail? exp)
+         (analyze-if-fail exp))
         ((lambda? exp) 
          (analyze-lambda exp))
         ((begin? exp) 
@@ -450,6 +486,10 @@
          (analyze (let->combination exp)))
         ((amb? exp)
          (analyze-amb exp))
+        ((ramb? exp)
+         (analyze-ramb exp))
+        ((require? exp)
+         (analyze-require exp))
         ((application? exp) 
          (analyze-application exp))
         (else
@@ -494,7 +534,18 @@
                      old-value
                      env)
                     (fail2)))))
-               fail))))
+             fail))))
+
+(define (analyze-permanent-assignment exp)
+  (let ((var (assignment-variable exp))
+        (vproc (analyze 
+                (assignment-value exp))))
+    (lambda (env succeed fail)
+      (vproc env
+             (lambda (val fail2)    ; *1*
+               (set-variable-value! var val env)
+               (succeed 'ok fail2))
+             fail))))
 
 (define (analyze-definition exp)
   (let ((var (definition-variable exp))
@@ -523,6 +574,21 @@
              ;; evaluating the predicate
              fail))))
 
+(define (analyze-if-fail exp)
+  (let ((fproc (analyze (if-fail-failable exp)))
+        (aproc (analyze (if-fail-alternative exp))))
+    (lambda (env succeed fail)
+      (fproc env
+             ;; success continuation for evaluating
+             ;; the failable exp to obtain val
+             (lambda (val fail2)
+               (succeed val fail2))
+             ;; failure continuation falls back to evaluating
+             ;; the alternative exp, and doesn't directly use
+             ;; fail
+             (lambda ()
+               (aproc env succeed fail))))))
+             
 (define (analyze-lambda exp)
   (let ((vars (lambda-parameters exp))
         (bproc (analyze-sequence 
@@ -616,3 +682,31 @@
              (lambda ()
                (try-next (cdr choices))))))
       (try-next cprocs))))
+
+(#%require (prefix rkt: racket/base))
+(#%require (prefix rkt: racket/list))
+(#%require (prefix rkt: racket/sequence))
+
+(define (analyze-ramb exp)
+  (let ((cprocs
+         (rkt:shuffle (rkt:sequence->list (map analyze (amb-choices exp))))))
+    (lambda (env succeed fail)
+      (define (try-next choices)
+        (if (rkt:null? choices)
+            (fail)
+            ((rkt:car choices) 
+             env
+             succeed
+             (lambda ()
+               (try-next (rkt:cdr choices))))))
+      (try-next cprocs))))
+
+(define (analyze-require exp)
+  (let ((pproc (analyze (require-predicate exp))))
+    (lambda (env succeed fail)
+      (pproc env
+             (lambda (pred-val fail2)
+               (if pred-val
+                   (succeed 'ok fail2)
+                   (fail2)))
+             fail))))

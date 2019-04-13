@@ -24,6 +24,10 @@
   (require (<= low high))
   (amb low (an-integer-between (+ low 1) high)))
 
+(define (an-element-of lst)
+  (require (not (null? lst)))
+  (amb (car lst) (an-element-of (cdr lst))))
+
 (define (accumulate op initial sequence)
   (if (null? sequence)
       initial
