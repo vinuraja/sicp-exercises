@@ -706,7 +706,7 @@
     (lambda (env succeed fail)
       (pproc env
              (lambda (pred-val fail2)
-               (if pred-val
+               (if (true? pred-val)
                    (succeed 'ok fail2)
                    (fail2)))
              fail))))
