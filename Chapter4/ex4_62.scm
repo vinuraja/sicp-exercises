@@ -6,10 +6,7 @@
 (initialize-data-base '())
 
 (add-rule-exp!
- '(rule (last-pair ?y ?y)
-        (lisp-value (lambda (lst)
-                      (= (length lst) 1))
-                    ?y)))
+ '(rule (last-pair (?y . ()) (?y . ()))))
 (add-rule-exp!
  '(rule (last-pair (?u . ?v) ?y)
         (last-pair ?v ?y)))
