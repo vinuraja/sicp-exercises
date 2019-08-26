@@ -1,5 +1,15 @@
 #lang sicp
 
+; Syntax changes:
+; 1. Changed save and restore to push and pop respectively to
+; make it clearer that we are using a stack.
+; 2. Changed syntax of reg, const and op:
+;    o Instead of (reg n) or (const 1), you write
+;      n or 1 respectively.
+;    o Instead of (op -) (reg n) (const 1), (- n 1).
+
+; Only methods related to syntax were edited for this change.
+
 (define (tagged-list? exp tag)
   (if (pair? exp)
       (eq? (car exp) tag)
@@ -154,9 +164,9 @@
 
 (define (assemble controller-text machine)
   (extract-labels controller-text
-    (lambda (insts labels)
-      (update-insts! insts labels machine)
-      insts)))
+                  (lambda (insts labels)
+                    (update-insts! insts labels machine)
+                    insts)))
 
 (define (has-label? labels label-name)
   (let ((val (assoc label-name labels)))
@@ -239,9 +249,9 @@
           inst machine labels flag pc))
         ((eq? (car inst) 'goto)
          (make-goto inst machine labels pc))
-        ((eq? (car inst) 'save)
+        ((eq? (car inst) 'push)
          (make-save inst machine stack pc))
-        ((eq? (car inst) 'restore)
+        ((eq? (car inst) 'pop)
          (make-restore inst machine stack pc))
         ((eq? (car inst) 'perform)
          (make-perform
@@ -406,13 +416,13 @@
                      exp))))
 
 (define (register-exp? exp)
-  (tagged-list? exp 'reg))
+  (symbol? exp))
 (define (register-exp-reg exp)
-  (cadr exp))
+  exp)
 (define (constant-exp? exp)
-  (tagged-list? exp 'const))
+  (or (number? exp) (string? exp)))
 (define (constant-exp-value exp)
-  (cadr exp))
+  exp)
 (define (label-exp? exp)
   (tagged-list? exp 'label))
 (define (label-exp-label exp) 
@@ -432,12 +442,11 @@
                               aprocs)))))
 
 (define (operation-exp? exp)
-  (and (pair? exp)
-       (tagged-list? (car exp) 'op)))
+  (and (pair? exp) (pair? (car exp)) (not (label-exp? (car exp)))))
 (define (operation-exp-op operation-exp)
-  (cadr (car operation-exp)))
+  (caar operation-exp))
 (define (operation-exp-operands operation-exp)
-  (cdr operation-exp))
+  (cdar operation-exp))
 
 (define (lookup-prim symbol operations)
   (let ((val (assoc symbol operations)))
@@ -445,3 +454,36 @@
         (cadr val)
         (error "Unknown operation: ASSEMBLE"
                symbol))))
+
+;
+; Testing
+;
+
+(#%require rackunit)
+
+(define rec-expt-machine
+  (make-machine
+   '(b n val continue)
+   (list (list '- -) (list '= =) (list '* *))
+   '(controller
+     (assign continue (label expt-done))
+     expt-loop
+     (test (= n 0))
+     (branch (label base-case))
+     (assign n (-  n 1))
+     (push continue)
+     (assign continue (label after-expt))
+     (goto (label expt-loop))
+     after-expt
+     (pop continue)
+     (assign val (* b val))
+     (goto continue)
+     base-case
+     (assign val 1)
+     (goto continue)
+     expt-done)))
+
+(set-register-contents! rec-expt-machine 'b 2)
+(set-register-contents! rec-expt-machine 'n 5)
+(start rec-expt-machine)
+(check-equal? 32 (get-register-contents rec-expt-machine 'val))
