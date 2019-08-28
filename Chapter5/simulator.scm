@@ -1,4 +1,4 @@
-#lang sicp
+;#lang sicp
 
 (define (tagged-list? exp tag)
   (if (pair? exp)
@@ -405,6 +405,19 @@
                       ASSEMBLE"
                      exp))))
 
+(define (make-operand-exp exp machine)
+    (cond ((constant-exp? exp)
+         (let ((c (constant-exp-value exp)))
+           (lambda () c)))
+        ((register-exp? exp)
+         (let ((r (get-register
+                   machine
+                   (register-exp-reg exp))))
+           (lambda () (get-contents r))))
+        (else (error "Unknown expression type: 
+                      ASSEMBLE"
+                     exp))))
+
 (define (register-exp? exp)
   (tagged-list? exp 'reg))
 (define (register-exp-reg exp)
@@ -425,8 +438,7 @@
              operations))
         (aprocs
          (map (lambda (e)
-                (make-primitive-exp 
-                 e machine labels))
+                (make-operand-exp e machine))
               (operation-exp-operands exp))))
     (lambda () (apply op (map (lambda (p) (p))
                               aprocs)))))
