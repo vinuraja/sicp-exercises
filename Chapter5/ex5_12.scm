@@ -81,8 +81,8 @@
                   (lambda () 
                     (stack 'initialize)))))
           (register-table
-           (list (list 'pc pc) 
-                 (list 'flag flag))))
+           (list (list 'pc pc '()) 
+                 (list 'flag flag '()))))
       (define (allocate-register name)
         (if (assoc name register-table)
             (error 
@@ -91,7 +91,8 @@
             (set! register-table
                   (cons 
                    (list name 
-                         (make-register name))
+                         (make-register name)
+                         '())
                    register-table)))
         'register-allocated)
       (define (lookup-register-table name)
@@ -104,7 +105,7 @@
       (define (lookup-register name)
         (cadr (lookup-register-table name)))
       (define (lookup-register-sources name)
-        (cddr (lookup-register-table name)))
+        (caddr (lookup-register-table name)))
       (define (execute)
         (let ((insts (get-contents pc)))
           (if (null? insts)
@@ -134,18 +135,18 @@
       (define (add-assignment-source inst)
         (if (eq? (car inst) 'assign)
             (let* ((reg-name (assign-reg-name inst))
-                  (value-exp (assign-value-exp inst))
-                  (register-info (lookup-register-table reg-name))
-                  (register-sources-ptr (cdr register-info))
-                  (register-sources (lookup-register-sources reg-name)))
+                   (value-exp (assign-value-exp inst))
+                   (register-info (lookup-register-table reg-name))
+                   (register-sources-ptr (cddr register-info))
+                   (register-sources (lookup-register-sources reg-name)))
               (if (not (member value-exp register-sources))
                   (begin
                     (display reg-name)
                     (display ": ")
                     (display register-sources)
                     (newline)
-                  (set-cdr! register-sources-ptr
-                        (cons value-exp register-sources)))))))
+                    (set-car! register-sources-ptr
+                              (cons value-exp register-sources)))))))
       (define (analyze-instruction-sequence)
         (for-each (lambda (inst)
                     (add-inst (car inst))
