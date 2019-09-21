@@ -90,7 +90,9 @@
   (let ((pc (make-register 'pc))
         (flag (make-register 'flag))
         (stack (make-stack))
-        (the-instruction-sequence '()))
+        (the-instruction-sequence '())
+        (inst-count 0)
+        (tracing? #f))
     (let ((the-ops
            (list (list 'initialize-stack
                        (lambda () 
@@ -119,11 +121,23 @@
               (cadr val)
               (error "Unknown register:" 
                      name))))
+      (define (print-inst-count)
+        (display (list 'inst-count
+                       '=
+                       inst-count)))
+      (define (reset-inst-count)
+        (set! inst-count 0))
       (define (execute)
         (let ((insts (get-contents pc)))
           (if (null? insts)
               'done
               (begin
+                (set! inst-count (+ inst-count 1))
+                (if tracing?
+                    (begin
+                      (print-instruction-labels (car insts))
+                      (display (instruction-text (car insts)))
+                      (newline)))
                 ((instruction-execution-proc 
                   (car insts)))
                 (execute)))))
@@ -153,6 +167,14 @@
               ((eq? message 'stack) stack)
               ((eq? message 'print-stack-statistics)
                (stack 'print-statistics))
+              ((eq? message 'print-inst-count)
+               (print-inst-count))
+              ((eq? message 'reset-inst-count)
+               (reset-inst-count))
+              ((eq? message 'trace-on)
+               (set! tracing? #t))
+              ((eq? message 'trace-off)
+               (set! tracing? #f))
               ((eq? message 'operations) 
                the-ops)
               (else (error "Unknown request: 
@@ -162,6 +184,16 @@
 
 (define (start machine)
   (machine 'start))
+
+(define (print-inst-count machine)
+  (machine 'print-inst-count))
+(define (reset-inst-count machine)
+  (machine 'reset-inst-count))
+
+(define (trace-on machine)
+  (machine 'trace-on))
+(define (trace-off machine)
+  (machine 'trace-off))
 
 (define (print-stack-statistics machine)
   (machine 'print-stack-statistics))
@@ -203,13 +235,18 @@
            (if (symbol? next-inst)
                (if (has-label? labels next-inst)
                    (error "Label already seen: " next-inst)
-                   (receive 
-                    insts
-                    (cons 
-                     (make-label-entry 
-                      next-inst
-                      insts)
-                     labels)))
+                   (begin
+                     (if (not (null? insts))
+                         (set-instruction-labels!
+                          (car insts)
+                          next-inst))
+                     (receive 
+                      insts
+                      (cons 
+                       (make-label-entry 
+                        next-inst
+                        insts)
+                       labels))))
                (receive 
                 (cons (make-instruction 
                        next-inst)
@@ -236,14 +273,23 @@
      insts)))
 
 (define (make-instruction text)
-  (cons text '()))
+  (list text '() '()))
 (define (instruction-text inst) (car inst))
 (define (instruction-execution-proc inst)
-  (cdr inst))
+  (cadr inst))
+(define (instruction-labels inst)
+  (caddr inst))
 (define (set-instruction-execution-proc!
          inst
          proc)
-  (set-cdr! inst proc))
+  (set-car! (cdr inst) proc))
+(define (set-instruction-labels! inst label)
+  (set-car! (cddr inst) (cons label (caddr inst))))
+(define (print-instruction-labels inst)
+  (for-each (lambda (label)
+              (display label)
+              (newline))
+  (instruction-labels inst)))
 
 (define (make-label-entry label-name insts)
   (cons label-name insts))
@@ -257,7 +303,9 @@
 
 (define (make-execution-procedure 
          inst labels machine pc flag stack ops)
-  (cond ((eq? (car inst) 'assign)
+  (cond ((and (symbol? inst) (has-label? labels inst))
+         (make-label pc))
+        ((eq? (car inst) 'assign)
          (make-assign 
           inst machine labels ops pc))
         ((eq? (car inst) 'test)
@@ -278,6 +326,10 @@
         (else (error "Unknown instruction 
                       type: ASSEMBLE"
                      inst))))
+
+(define (make-label pc)
+  (lambda ()
+    (advance-pc pc)))
 
 (define (make-assign 
          inst machine labels operations pc)
