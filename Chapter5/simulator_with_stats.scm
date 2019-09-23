@@ -19,11 +19,21 @@
     machine))
 
 (define (make-register name)
-  (let ((contents '*unassigned*))
+  (let ((contents '*unassigned*)
+        (tracing? #f))
     (define (dispatch message)
-      (cond ((eq? message 'get) contents)
+      (cond ((eq? message 'set-trace)
+             (lambda (enable)
+               (set! tracing? enable)))
+            ((eq? message 'get) contents)
             ((eq? message 'set)
-             (lambda (value) 
+             (lambda (value)
+               (if tracing?
+                   (begin
+                     (display (list 'name '= name
+                                    'old-contents '= contents
+                                    'new-contents '= value))
+                     (newline)))
                (set! contents value)))
             (else
              (error "Unknown request: 
@@ -36,6 +46,9 @@
 
 (define (set-contents! register value)
   ((register 'set) value))
+
+(define (set-trace! register enable)
+  ((register 'set-trace) enable))
 
 (define (make-stack)
   (let ((s '())
@@ -121,32 +134,75 @@
               (cadr val)
               (error "Unknown register:" 
                      name))))
+      (define (set-register-trace! name enable)
+        (let ((register (lookup-register name)))
+          (set-trace! register enable)))
       (define (print-inst-count)
         (display (list 'inst-count
                        '=
                        inst-count)))
       (define (reset-inst-count)
         (set! inst-count 0))
-      (define (execute)
+      (define (cancel-all-breakpoints-impl)
+        (define (iter-cancel-all-breakpoints-impl insts)
+          (if (not (null? insts))
+              (begin
+                (cancel-instruction-breakpoint! (car insts))
+                (iter-cancel-all-breakpoints-impl (cdr insts)))))
+        (iter-cancel-all-breakpoints-impl the-instruction-sequence))
+      (define (cancel-breakpoint-impl label n)
+        (define (cancel-breakpoint-after-label insts k)
+          (cond ((null? insts)
+                 'breakpoint-not-disabled)
+                ((= k 0) (cancel-instruction-breakpoint! (car insts)))
+                (else (cancel-breakpoint-after-label (cdr insts) (- k 1)))))
+        (define (find-label-and-cancel-breakpoint insts)
+          (cond ((null? insts)
+                 'breakpoint-not-disabled)
+                ((memq label (instruction-labels (car insts)))
+                 (cancel-breakpoint-after-label insts (- n 1)))
+                (else (find-label-and-cancel-breakpoint (cdr insts)))))
+        (find-label-and-cancel-breakpoint the-instruction-sequence))
+      (define (set-breakpoint-impl label n)
+        (define (set-breakpoint-after-label insts k)
+          (cond ((null? insts)
+                 'breakpoint-not-set)
+                ((= k 0) (set-instruction-breakpoint! (car insts) label n))
+                (else (set-breakpoint-after-label (cdr insts) (- k 1)))))
+        (define (find-label-and-set-breakpoint insts)
+          (cond ((null? insts)
+                 'breakpoint-not-set)
+                ((memq label (instruction-labels (car insts)))
+                 (set-breakpoint-after-label insts (- n 1)))
+                (else (find-label-and-set-breakpoint (cdr insts)))))
+        (find-label-and-set-breakpoint the-instruction-sequence))
+      (define (execute skip-brkpt)
         (let ((insts (get-contents pc)))
           (if (null? insts)
               'done
-              (begin
-                (set! inst-count (+ inst-count 1))
-                (if tracing?
+              (let ((brkpt (instruction-breakpoint (car insts))))
+                (if (and (not skip-brkpt) (breakpoint-enabled? brkpt))
                     (begin
-                      (print-instruction-labels (car insts))
-                      (display (instruction-text (car insts)))
-                      (newline)))
-                ((instruction-execution-proc 
-                  (car insts)))
-                (execute)))))
+                      (display (list 'breakpoint
+                                     'label '= (breakpoint-label brkpt)
+                                     'n '= (breakpoint-n brkpt)))
+                      (newline))
+                    (begin
+                      (set! inst-count (+ inst-count 1))
+                      (if tracing?
+                          (begin
+                            (print-instruction-labels (car insts))
+                            (display (instruction-text (car insts)))
+                            (newline)))
+                      ((instruction-execution-proc 
+                        (car insts)))
+                      (execute #f)))))))
       (define (dispatch message)
         (cond ((eq? message 'start)
                (set-contents! 
                 pc
                 the-instruction-sequence)
-               (execute))
+               (execute #f))
               ((eq? 
                 message 
                 'install-instruction-sequence)
@@ -177,6 +233,19 @@
                (set! tracing? #f))
               ((eq? message 'operations) 
                the-ops)
+              ((eq? message 'set-register-trace)
+               (lambda (name enable)
+                 (set-register-trace! name enable)))
+              ((eq? message 'set-breakpoint)
+               (lambda (label n)
+                 (set-breakpoint-impl label n)))
+              ((eq? message 'cancel-breakpoint)
+               (lambda (label n)
+                 (cancel-breakpoint-impl label n)))
+              ((eq? message 'cancel-all-breakpoints)
+               (cancel-all-breakpoints-impl))
+              ((eq? message 'proceed)
+               (execute #t))
               (else (error "Unknown request: 
                             MACHINE"
                            message))))
@@ -185,10 +254,24 @@
 (define (start machine)
   (machine 'start))
 
+(define (set-breakpoint machine label n)
+  ((machine 'set-breakpoint) label n))
+(define (cancel-breakpoint machine label n)
+  ((machine 'cancel-breakpoint) label n))
+(define (cancel-all-breakpoints machine)
+  (machine 'cancel-all-breakpoints))
+(define (proceed-machine machine)
+  (machine 'proceed))
+
 (define (print-inst-count machine)
   (machine 'print-inst-count))
 (define (reset-inst-count machine)
   (machine 'reset-inst-count))
+
+(define (register-trace-on machine name)
+  ((machine 'set-register-trace) name #t))
+(define (register-trace-off machine name)
+  ((machine 'set-register-trace) name #f))
 
 (define (trace-on machine)
   (machine 'trace-on))
@@ -273,23 +356,36 @@
      insts)))
 
 (define (make-instruction text)
-  (list text '() '()))
+  (list text '() '() '()))
 (define (instruction-text inst) (car inst))
 (define (instruction-execution-proc inst)
   (cadr inst))
 (define (instruction-labels inst)
   (caddr inst))
+(define (instruction-breakpoint inst)
+  (cadddr inst))
 (define (set-instruction-execution-proc!
          inst
          proc)
   (set-car! (cdr inst) proc))
 (define (set-instruction-labels! inst label)
   (set-car! (cddr inst) (cons label (caddr inst))))
+(define (set-instruction-breakpoint! inst label n)
+  (set-car! (cdddr inst) (list label n)))
+(define (cancel-instruction-breakpoint! inst)
+  (set-car! (cdddr inst) '()))
 (define (print-instruction-labels inst)
   (for-each (lambda (label)
               (display label)
               (newline))
-  (instruction-labels inst)))
+            (instruction-labels inst)))
+
+(define (breakpoint-label brkpt)
+  (car brkpt))
+(define (breakpoint-n brkpt)
+  (cadr brkpt))
+(define (breakpoint-enabled? brkpt)
+  (not (null? brkpt)))
 
 (define (make-label-entry label-name insts)
   (cons label-name insts))
@@ -303,9 +399,7 @@
 
 (define (make-execution-procedure 
          inst labels machine pc flag stack ops)
-  (cond ((and (symbol? inst) (has-label? labels inst))
-         (make-label pc))
-        ((eq? (car inst) 'assign)
+  (cond ((eq? (car inst) 'assign)
          (make-assign 
           inst machine labels ops pc))
         ((eq? (car inst) 'test)
@@ -326,10 +420,6 @@
         (else (error "Unknown instruction 
                       type: ASSEMBLE"
                      inst))))
-
-(define (make-label pc)
-  (lambda ()
-    (advance-pc pc)))
 
 (define (make-assign 
          inst machine labels operations pc)

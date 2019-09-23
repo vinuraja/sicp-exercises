@@ -93,6 +93,75 @@
 (around
  (with-output-to-file "test.dat"
    (lambda ()
+     (define tracing-rec-expt-machine (rec-expt-machine-impl))
+     (set-register-contents! tracing-rec-expt-machine 'b 2)
+     (set-register-contents! tracing-rec-expt-machine 'n 3)
+     (register-trace-on tracing-rec-expt-machine 'val)
+     (start tracing-rec-expt-machine)
+     (register-trace-off tracing-rec-expt-machine 'val)
+     (set-register-contents! tracing-rec-expt-machine 'b 2)
+     (set-register-contents! tracing-rec-expt-machine 'n 3)
+     (start tracing-rec-expt-machine)))
+ (with-input-from-file "test.dat"
+   (lambda ()
+     (check-equal? (rkt:list
+                    "(name = val old-contents = *unassigned* new-contents = 1)"
+                    "(name = val old-contents = 1 new-contents = 2)"
+                    "(name = val old-contents = 2 new-contents = 4)"
+                    "(name = val old-contents = 4 new-contents = 8)")
+                   (string-split
+                    (read-line (current-input-port) 'return)
+                    "\n"))))
+ (delete-file "test.dat"))
+(around
+ (with-output-to-file "test.dat"
+   (lambda ()
+     (define breaking-rec-expt-machine (rec-expt-machine-impl))
+     (set-register-contents! breaking-rec-expt-machine 'b 2)
+     (set-register-contents! breaking-rec-expt-machine 'n 1)
+     (set-breakpoint breaking-rec-expt-machine 'expt-loop 4)
+     (trace-on breaking-rec-expt-machine)
+     (start breaking-rec-expt-machine)
+     ; After breakpoint is hit.
+     (check-equal? 0 (get-register-contents breaking-rec-expt-machine 'n))
+     (trace-off breaking-rec-expt-machine)
+     (proceed-machine breaking-rec-expt-machine)
+     (check-equal? 2 (get-register-contents breaking-rec-expt-machine 'val))
+
+     (set-breakpoint breaking-rec-expt-machine 'controller 3)
+     (cancel-breakpoint breaking-rec-expt-machine 'expt-loop 4)
+     (set-register-contents! breaking-rec-expt-machine 'b 2)
+     (set-register-contents! breaking-rec-expt-machine 'n 3)
+     (trace-on breaking-rec-expt-machine)
+     (start breaking-rec-expt-machine)
+     ; After breakpoint is hit.
+     (check-equal? 3 (get-register-contents breaking-rec-expt-machine 'n))
+     (cancel-all-breakpoints breaking-rec-expt-machine)
+     (trace-off breaking-rec-expt-machine)
+     (proceed-machine breaking-rec-expt-machine)
+     (check-equal? 8 (get-register-contents breaking-rec-expt-machine 'val))))
+ (with-input-from-file "test.dat"
+   (lambda ()
+     (check-equal? (rkt:list
+                    "controller"
+                    "(assign continue (label expt-done))"
+                    "expt-loop"
+                    "(test (op =) (reg n) (const 0))"
+                    "(branch (label base-case))"
+                    "(assign n (op -) (reg n) (const 1))"
+                    "(breakpoint label = expt-loop n = 4)"
+                    "controller"
+                    "(assign continue (label expt-done))"
+                    "expt-loop"
+                    "(test (op =) (reg n) (const 0))"
+                    "(breakpoint label = controller n = 3)")
+                   (string-split
+                    (read-line (current-input-port) 'return)
+                    "\n"))))
+ (delete-file "test.dat"))
+(around
+ (with-output-to-file "test.dat"
+   (lambda ()
      (reset-inst-count rec-expt-machine)
      (print-inst-count rec-expt-machine)))
  (with-input-from-file "test.dat"
